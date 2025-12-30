@@ -70,6 +70,8 @@
     </style>
   </head>
   <body>
+    <canvas id="bevy-canvas" tabindex="-1"></canvas>
+
     <div id="loading">
       <div class="spinner"></div>
       <div>Loading...</div>
@@ -87,6 +89,53 @@
 
     <script type="module">
       import init from "./build/wasm_ime.js";
+
+      // Prevent canvas from stealing focus when input is focused
+      const canvas = document.getElementById("bevy-canvas");
+      const hiddenInput = document.getElementById("bevy-hidden-input");
+      
+      // Track if we want to keep input focused
+      let keepInputFocused = false;
+      
+      // Expose function to Rust to request focus
+      window.bevyFocusInput = function() {
+        keepInputFocused = true;
+        hiddenInput.focus();
+      };
+      
+      window.bevyBlurInput = function() {
+        keepInputFocused = false;
+        hiddenInput.blur();
+      };
+      
+      // Prevent canvas from taking focus on touch/click
+      canvas.addEventListener("mousedown", (e) => {
+        if (keepInputFocused) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+      
+      canvas.addEventListener("touchstart", (e) => {
+        if (keepInputFocused) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+      
+      canvas.addEventListener("touchend", (e) => {
+        if (keepInputFocused) {
+          e.preventDefault();
+          hiddenInput.focus();
+        }
+      }, { passive: false });
+      
+      // Re-focus input if it loses focus unexpectedly
+      hiddenInput.addEventListener("blur", () => {
+        if (keepInputFocused) {
+          setTimeout(() => {
+            hiddenInput.focus();
+          }, 10);
+        }
+      });
 
       init().then(() => {
         document.getElementById("loading").style.display = "none";

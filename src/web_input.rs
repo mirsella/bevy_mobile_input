@@ -156,16 +156,21 @@ mod platform {
         composition_end.forget();
     }
 
+    #[wasm_bindgen]
+    extern "C" {
+        #[wasm_bindgen(js_name = bevyFocusInput)]
+        fn js_focus_input();
+
+        #[wasm_bindgen(js_name = bevyBlurInput)]
+        fn js_blur_input();
+    }
+
     pub fn focus_input() {
-        if let Some(input) = get_input_element() {
-            let _ = input.focus();
-        }
+        js_focus_input();
     }
 
     pub fn blur_input() {
-        if let Some(input) = get_input_element() {
-            let _ = input.blur();
-        }
+        js_blur_input();
     }
 
     pub fn set_input_value(value: &str) {

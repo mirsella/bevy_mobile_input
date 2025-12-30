@@ -5,7 +5,15 @@ use web_input::{WebInputPlugin, WebInputState, WebTextInput, WebTextSubmit};
 
 fn main() -> AppExit {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                fit_canvas_to_parent: true,
+                prevent_default_event_handling: false,
+                canvas: Some("#bevy-canvas".into()),
+                ..default()
+            }),
+            ..default()
+        }))
         .add_plugins(WebInputPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, (handle_click, handle_input, handle_submit))
@@ -32,6 +40,7 @@ fn setup(mut commands: Commands) {
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
             row_gap: Val::Px(20.0),
+            padding: UiRect::horizontal(Val::Px(16.0)),
             ..default()
         })
         .with_children(|parent| {
@@ -48,11 +57,13 @@ fn setup(mut commands: Commands) {
                 .spawn((
                     InputBox,
                     Node {
-                        width: Val::Px(400.0),
+                        width: Val::Percent(90.0),
+                        max_width: Val::Px(400.0),
                         height: Val::Px(50.0),
                         padding: UiRect::all(Val::Px(10.0)),
                         border: UiRect::all(Val::Px(2.0)),
                         align_items: AlignItems::Center,
+                        overflow: Overflow::clip(),
                         ..default()
                     },
                     BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
