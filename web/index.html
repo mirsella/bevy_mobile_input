@@ -3,7 +3,6 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>Bevy Web IME</title>
     <style>
       * {
@@ -29,17 +28,10 @@
         position: absolute;
         left: 50%;
         top: 50%;
-        transform: translate(-50%, -50%);
         opacity: 0;
         width: 1px;
         height: 1px;
-        border: none;
-        outline: none;
-        background: transparent;
-        color: transparent;
-        caret-color: transparent;
         pointer-events: none;
-        z-index: -1;
       }
 
       #loading {
@@ -49,91 +41,45 @@
         transform: translate(-50%, -50%);
         color: #ffffff;
         font-family: system-ui, sans-serif;
-        text-align: center;
-      }
-
-      #loading .spinner {
-        width: 40px;
-        height: 40px;
-        border: 3px solid #333;
-        border-top-color: #fff;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin: 0 auto 16px;
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
       }
     </style>
   </head>
   <body>
-    <canvas id="bevy-canvas" tabindex="-1"></canvas>
-
-    <div id="loading">
-      <div class="spinner"></div>
-      <div>Loading...</div>
-    </div>
+    <canvas id="bevy-canvas"></canvas>
+    <div id="loading">Loading...</div>
 
     <input
       id="bevy-hidden-input"
       type="text"
       autocomplete="off"
       autocapitalize="off"
-      autocorrect="off"
       spellcheck="false"
-      inputmode="text"
     />
 
     <script type="module">
-      import init from "./build/wasm_ime.js";
+      import init from "./build/bevy_mobile_input.js";
 
-      // Prevent canvas from stealing focus when input is focused
       const canvas = document.getElementById("bevy-canvas");
       const hiddenInput = document.getElementById("bevy-hidden-input");
-      
-      // Track if we want to keep input focused
-      let keepInputFocused = false;
-      
-      // Expose function to Rust to request focus
-      window.bevyFocusInput = function() {
-        keepInputFocused = true;
+
+      let inputFocused = false;
+
+      window.bevyFocusInput = () => {
+        inputFocused = true;
         hiddenInput.focus();
       };
-      
-      window.bevyBlurInput = function() {
-        keepInputFocused = false;
-        hiddenInput.blur();
-      };
-      
-      // Prevent canvas from taking focus on touch/click
+
       canvas.addEventListener("mousedown", (e) => {
-        if (keepInputFocused) {
-          e.preventDefault();
-        }
-      }, { passive: false });
-      
+        if (inputFocused) e.preventDefault();
+      });
+
       canvas.addEventListener("touchstart", (e) => {
-        if (keepInputFocused) {
-          e.preventDefault();
-        }
-      }, { passive: false });
-      
-      canvas.addEventListener("touchend", (e) => {
-        if (keepInputFocused) {
-          e.preventDefault();
-          hiddenInput.focus();
-        }
-      }, { passive: false });
-      
-      // Re-focus input if it loses focus unexpectedly
+        if (inputFocused) e.preventDefault();
+      });
+
       hiddenInput.addEventListener("blur", () => {
-        if (keepInputFocused) {
-          setTimeout(() => {
-            hiddenInput.focus();
-          }, 10);
+        if (inputFocused) {
+          setTimeout(() => hiddenInput.focus(), 10);
         }
       });
 

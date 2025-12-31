@@ -964,6 +964,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ef8e4b7e61dfe7719bb03c884dc270cd46a82efb40f93e9933b990c5c190c59"
 
 [[package]]
+name = "bevy_mobile_input"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "log",
+ "tracing",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "bevy_pbr"
 version = "0.17.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4650,17 +4661,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cbc538057e648b67f72a982e708d485b2efa771e1ac05fec311f9f63e5800db4"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "wasm_ime"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "log",
- "tracing",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]

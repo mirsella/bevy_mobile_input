@@ -1,7 +1,7 @@
 use bevy::{color::palettes::tailwind, prelude::*};
 
 mod web_input;
-use web_input::{WebInputPlugin, WebInputState, WebTextInput, WebTextSubmit};
+use web_input::{WebInputPlugin, WebTextInput, WebTextSubmit};
 
 fn main() -> AppExit {
     App::new()
@@ -21,10 +21,10 @@ fn main() -> AppExit {
 }
 
 #[derive(Component)]
-struct TextInputDisplay;
+struct InputBox;
 
 #[derive(Component)]
-struct InputBox;
+struct InputText;
 
 #[derive(Component)]
 struct SubmittedText;
@@ -40,25 +40,19 @@ fn setup(mut commands: Commands) {
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
             row_gap: Val::Px(20.0),
-            padding: UiRect::horizontal(Val::Px(16.0)),
             ..default()
         })
         .with_children(|parent| {
             parent.spawn((
                 Text::new("Tap the input box below to type"),
-                TextFont {
-                    font_size: 24.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
+                TextFont::from_font_size(24.0),
             ));
 
             parent
                 .spawn((
                     InputBox,
                     Node {
-                        width: Val::Percent(90.0),
-                        max_width: Val::Px(400.0),
+                        width: Val::Px(300.0),
                         height: Val::Px(50.0),
                         padding: UiRect::all(Val::Px(10.0)),
                         border: UiRect::all(Val::Px(2.0)),
@@ -70,34 +64,18 @@ fn setup(mut commands: Commands) {
                     BorderColor::all(tailwind::GRAY_500),
                     Interaction::default(),
                 ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        TextInputDisplay,
-                        Text::new(""),
-                        TextFont {
-                            font_size: 20.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
-                });
+                .with_child((InputText, Text::new(""), TextFont::from_font_size(20.0)));
 
             parent.spawn((
                 Text::new("Press Enter to submit"),
-                TextFont {
-                    font_size: 16.0,
-                    ..default()
-                },
+                TextFont::from_font_size(16.0),
                 TextColor(tailwind::GRAY_400.into()),
             ));
 
             parent.spawn((
                 SubmittedText,
                 Text::new(""),
-                TextFont {
-                    font_size: 20.0,
-                    ..default()
-                },
+                TextFont::from_font_size(20.0),
                 TextColor(tailwind::GREEN_400.into()),
             ));
         });
@@ -106,11 +84,9 @@ fn setup(mut commands: Commands) {
 fn handle_click(
     query: Query<&Interaction, (Changed<Interaction>, With<InputBox>)>,
     mut border_query: Query<&mut BorderColor, With<InputBox>>,
-    mut state: ResMut<WebInputState>,
 ) {
     for interaction in &query {
         if *interaction == Interaction::Pressed {
-            state.focused = true;
             web_input::focus_input();
             for mut border in &mut border_query {
                 *border = BorderColor::all(tailwind::BLUE_500);
@@ -121,7 +97,7 @@ fn handle_click(
 
 fn handle_input(
     mut events: MessageReader<WebTextInput>,
-    mut query: Query<&mut Text, With<TextInputDisplay>>,
+    mut query: Query<&mut Text, With<InputText>>,
 ) {
     for WebTextInput(text) in events.read() {
         for mut display in &mut query {
@@ -132,12 +108,12 @@ fn handle_input(
 
 fn handle_submit(
     mut events: MessageReader<WebTextSubmit>,
-    mut display_query: Query<&mut Text, (With<TextInputDisplay>, Without<SubmittedText>)>,
-    mut submitted_query: Query<&mut Text, (With<SubmittedText>, Without<TextInputDisplay>)>,
+    mut input_query: Query<&mut Text, (With<InputText>, Without<SubmittedText>)>,
+    mut submitted_query: Query<&mut Text, (With<SubmittedText>, Without<InputText>)>,
 ) {
     for WebTextSubmit(text) in events.read() {
-        for mut display in &mut display_query {
-            display.0.clear();
+        for mut input in &mut input_query {
+            input.0.clear();
         }
         for mut submitted in &mut submitted_query {
             submitted.0 = format!("Submitted: {}", text);

@@ -6,26 +6,12 @@ pub struct WebTextInput(pub String);
 #[derive(Message, Debug, Clone)]
 pub struct WebTextSubmit(pub String);
 
-#[derive(Message, Debug, Clone)]
-pub struct WebImeComposition {
-    pub text: String,
-    pub is_composing: bool,
-}
-
-#[derive(Resource, Default)]
-pub struct WebInputState {
-    pub focused: bool,
-    pub current_value: String,
-}
-
 pub struct WebInputPlugin;
 
 impl Plugin for WebInputPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<WebTextInput>()
-            .add_message::<WebTextSubmit>()
-            .add_message::<WebImeComposition>()
-            .init_resource::<WebInputState>();
+            .add_message::<WebTextSubmit>();
 
         #[cfg(target_arch = "wasm32")]
         {
@@ -40,16 +26,6 @@ pub fn focus_input() {
     platform::focus_input();
 }
 
-pub fn blur_input() {
-    #[cfg(target_arch = "wasm32")]
-    platform::blur_input();
-}
-
-pub fn set_input_value(value: &str) {
-    #[cfg(target_arch = "wasm32")]
-    platform::set_input_value(value);
-}
-
 #[cfg(target_arch = "wasm32")]
 mod platform {
     use super::*;
@@ -62,7 +38,6 @@ mod platform {
     enum WebEvent {
         Input(String),
         Submit(String),
-        Composition { text: String, is_composing: bool },
     }
 
     static EVENT_QUEUE: Mutex<Vec<WebEvent>> = Mutex::new(Vec::new());
@@ -102,88 +77,28 @@ mod platform {
             }
         }) as Box<dyn FnMut(_)>);
 
-        let composition_start = Closure::wrap(Box::new(move |e: web_sys::CompositionEvent| {
-            let text = e.data().unwrap_or_default();
-            if let Ok(mut queue) = EVENT_QUEUE.lock() {
-                queue.push(WebEvent::Composition {
-                    text,
-                    is_composing: true,
-                });
-            }
-        }) as Box<dyn FnMut(_)>);
-
-        let composition_update = Closure::wrap(Box::new(move |e: web_sys::CompositionEvent| {
-            let text = e.data().unwrap_or_default();
-            if let Ok(mut queue) = EVENT_QUEUE.lock() {
-                queue.push(WebEvent::Composition {
-                    text,
-                    is_composing: true,
-                });
-            }
-        }) as Box<dyn FnMut(_)>);
-
-        let composition_end = Closure::wrap(Box::new(move |e: web_sys::CompositionEvent| {
-            let text = e.data().unwrap_or_default();
-            if let Ok(mut queue) = EVENT_QUEUE.lock() {
-                queue.push(WebEvent::Composition {
-                    text,
-                    is_composing: false,
-                });
-            }
-        }) as Box<dyn FnMut(_)>);
-
         let _ =
             input.add_event_listener_with_callback("input", input_handler.as_ref().unchecked_ref());
         let _ = input
             .add_event_listener_with_callback("keydown", keydown_handler.as_ref().unchecked_ref());
-        let _ = input.add_event_listener_with_callback(
-            "compositionstart",
-            composition_start.as_ref().unchecked_ref(),
-        );
-        let _ = input.add_event_listener_with_callback(
-            "compositionupdate",
-            composition_update.as_ref().unchecked_ref(),
-        );
-        let _ = input.add_event_listener_with_callback(
-            "compositionend",
-            composition_end.as_ref().unchecked_ref(),
-        );
 
         input_handler.forget();
         keydown_handler.forget();
-        composition_start.forget();
-        composition_update.forget();
-        composition_end.forget();
     }
 
     #[wasm_bindgen]
     extern "C" {
         #[wasm_bindgen(js_name = bevyFocusInput)]
         fn js_focus_input();
-
-        #[wasm_bindgen(js_name = bevyBlurInput)]
-        fn js_blur_input();
     }
 
     pub fn focus_input() {
         js_focus_input();
     }
 
-    pub fn blur_input() {
-        js_blur_input();
-    }
-
-    pub fn set_input_value(value: &str) {
-        if let Some(input) = get_input_element() {
-            input.set_value(value);
-        }
-    }
-
     pub fn poll_web_input(
         mut input_events: MessageWriter<WebTextInput>,
         mut submit_events: MessageWriter<WebTextSubmit>,
-        mut composition_events: MessageWriter<WebImeComposition>,
-        mut state: ResMut<WebInputState>,
     ) {
         let events: Vec<WebEvent> = {
             let Ok(mut queue) = EVENT_QUEUE.lock() else {
@@ -195,15 +110,10 @@ mod platform {
         for event in events {
             match event {
                 WebEvent::Input(text) => {
-                    state.current_value = text.clone();
                     input_events.write(WebTextInput(text));
                 }
                 WebEvent::Submit(text) => {
-                    state.current_value.clear();
                     submit_events.write(WebTextSubmit(text));
-                }
-                WebEvent::Composition { text, is_composing } => {
-                    composition_events.write(WebImeComposition { text, is_composing });
                 }
             }
         }
