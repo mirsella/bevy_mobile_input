@@ -1,50 +1,70 @@
-# Bevy WASM IME Input
+# Bevy Mobile Input
 
-A Bevy plugin for handling text input on web/mobile platforms, including IME (Input Method Editor) support for CJK languages.
+A minimal demo showing how to trigger the virtual keyboard on mobile browsers in a Bevy WASM application.
 
-## Problem
+## The Problem
 
-Bevy doesn't natively support virtual keyboards on mobile browsers. This plugin solves that by using a hidden HTML input element to capture keyboard events and forward them to Bevy.
+WebGL canvas elements cannot receive text input directly. On mobile devices, tapping a canvas won't show the virtual keyboard. This is a fundamental browser limitation.
+
+## The Solution
+
+Use a hidden HTML `<input>` element as a bridge:
+
+```
+User taps Bevy UI  -->  Focus hidden <input>  -->  Virtual keyboard appears
+                                                          |
+Bevy receives KeyboardInput  <--  JS captures keydown  <--+
+```
+
+The hidden input is positioned off-screen but remains focusable. When focused, the browser shows the virtual keyboard. Keystrokes are captured and injected directly into Bevy's native `KeyboardInput` event queue, so your game code doesn't need any special handling.
 
 ## How It Works
 
-1. A hidden `<input>` element is positioned off-screen in the HTML
-2. When the user taps the in-game input field, the hidden input is focused
-3. This triggers the mobile virtual keyboard
-4. Input events (keystrokes, IME composition) are captured and sent to Bevy as messages
+1. **HTML**: A hidden `<input>` element exists in the page (`web/index.html`)
+2. **Click detection**: Bevy's picking system detects clicks on the input UI via `Pointer<Click>` observer
+3. **Focus**: `show_keyboard()` is called, which focuses the hidden input element
+4. **Keyboard appears**: The browser shows the virtual keyboard
+5. **Events flow**: `keydown` events are captured in JS and sent to Bevy as native `KeyboardInput` events
 
 ## Usage
 
 ```rust
 use bevy::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
 mod web_input;
 
 fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins)
-        .add_plugins(web_input::WebInputPlugin)
-        // your systems here
-        .run();
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins);
+    
+    #[cfg(target_arch = "wasm32")]
+    app.add_plugins(web_input::MobileInputPlugin);
+    
+    app.run();
 }
 
-fn handle_input(mut events: EventReader<web_input::WebTextInput>) {
-    for web_input::WebTextInput(text) in events.read() {
-        println!("Input: {}", text);
+// Trigger keyboard on click using an observer
+commands.spawn(Button).observe(|_: Trigger<Pointer<Click>>| {
+    #[cfg(target_arch = "wasm32")]
+    web_input::show_keyboard();
+});
+
+// Handle input like any physical keyboard
+fn handle_input(mut events: EventReader<KeyboardInput>) {
+    for event in events.read() {
+        // Works with both physical and virtual keyboards
     }
-}
-
-fn on_click_input_field() {
-    web_input::focus_input();
 }
 ```
 
-## Messages
+## Files
 
-| Message | Description |
-|---------|-------------|
-| `WebTextInput(String)` | Fired on each keystroke with current input value |
-| `WebTextSubmit(String)` | Fired when Enter is pressed |
-| `WebImeComposition { text, is_composing }` | Fired during IME composition (CJK input) |
+| File | Purpose |
+|------|---------|
+| `src/web_input.rs` | WASM-only plugin that sets up the JS-to-Bevy event bridge |
+| `web/index.html` | Hidden input element and viewport fixes for mobile |
+| `src/main.rs` | Demo app with a clickable input field |
 
 ## Running
 
@@ -54,8 +74,4 @@ Requires [bevy_cli](https://github.com/TheBevyFlock/bevy_cli):
 bevy run web
 ```
 
-## Files
-
-- `web/index.html` - Custom HTML with hidden input and focus management
-- `src/web_input.rs` - Bevy plugin with event handling
-- `src/main.rs` - Demo application
+Then open on a mobile device or use browser dev tools to emulate a touch device.
