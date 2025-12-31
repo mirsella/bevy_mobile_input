@@ -1,121 +1,106 @@
+use bevy::input::keyboard::{Key, KeyboardInput};
+use bevy::input::ButtonState;
 use bevy::prelude::*;
+use std::sync::Mutex;
+use wasm_bindgen::prelude::*;
+use web_sys::HtmlInputElement;
 
-#[derive(Message, Debug, Clone)]
-pub struct WebTextInput(pub String);
+static EVENT_QUEUE: Mutex<Vec<KeyboardInput>> = Mutex::new(Vec::new());
 
-#[derive(Message, Debug, Clone)]
-pub struct WebTextSubmit(pub String);
+pub struct MobileInputPlugin;
 
-pub struct WebInputPlugin;
-
-impl Plugin for WebInputPlugin {
+impl Plugin for MobileInputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<WebTextInput>()
-            .add_message::<WebTextSubmit>();
+        setup_event_listeners();
+        app.add_systems(First, poll_events);
+    }
+}
 
-        #[cfg(target_arch = "wasm32")]
-        {
-            platform::setup_web_input();
-            app.add_systems(Update, platform::poll_web_input);
+pub fn show_keyboard() {
+    if let Some(input) = get_input_element() {
+        let _ = input.focus();
+    }
+}
+
+#[allow(dead_code)]
+pub fn hide_keyboard() {
+    if let Some(input) = get_input_element() {
+        let _ = input.blur();
+    }
+}
+
+fn get_input_element() -> Option<HtmlInputElement> {
+    web_sys::window()?
+        .document()?
+        .get_element_by_id("mobile-keyboard-input")?
+        .dyn_into::<HtmlInputElement>()
+        .ok()
+}
+
+fn setup_event_listeners() {
+    let Some(input) = get_input_element() else {
+        warn!("mobile-keyboard-input element not found");
+        return;
+    };
+
+    let input_handler = Closure::wrap(Box::new(move |e: web_sys::InputEvent| {
+        let Some(data) = e.data() else { return };
+        for ch in data.chars() {
+            if let Ok(mut queue) = EVENT_QUEUE.lock() {
+                queue.push(KeyboardInput {
+                    key_code: KeyCode::Unidentified(
+                        bevy::input::keyboard::NativeKeyCode::Unidentified,
+                    ),
+                    logical_key: Key::Character(ch.to_string().into()),
+                    state: ButtonState::Pressed,
+                    repeat: false,
+                    text: Some(ch.to_string().into()),
+                    window: Entity::PLACEHOLDER,
+                });
+            }
         }
-    }
-}
+    }) as Box<dyn FnMut(_)>);
 
-pub fn focus_input() {
-    #[cfg(target_arch = "wasm32")]
-    platform::focus_input();
-}
-
-#[cfg(target_arch = "wasm32")]
-mod platform {
-    use super::*;
-    use std::sync::Mutex;
-    use wasm_bindgen::prelude::*;
-    use wasm_bindgen::JsCast;
-    use web_sys::HtmlInputElement;
-
-    #[derive(Debug, Clone)]
-    enum WebEvent {
-        Input(String),
-        Submit(String),
-    }
-
-    static EVENT_QUEUE: Mutex<Vec<WebEvent>> = Mutex::new(Vec::new());
-
-    fn get_input_element() -> Option<HtmlInputElement> {
-        web_sys::window()?
-            .document()?
-            .get_element_by_id("bevy-hidden-input")?
-            .dyn_into::<HtmlInputElement>()
-            .ok()
-    }
-
-    pub fn setup_web_input() {
-        let Some(input) = get_input_element() else {
-            warn!("bevy-hidden-input element not found in DOM");
-            return;
+    let keydown_handler = Closure::wrap(Box::new(move |e: web_sys::KeyboardEvent| {
+        let key = e.key();
+        let (key_code, logical_key) = match key.as_str() {
+            "Enter" => (KeyCode::Enter, Key::Enter),
+            "Backspace" => (KeyCode::Backspace, Key::Backspace),
+            "Escape" => (KeyCode::Escape, Key::Escape),
+            _ => return,
         };
 
-        let input_handler = Closure::wrap(Box::new(move |_: web_sys::InputEvent| {
+        if let Ok(mut queue) = EVENT_QUEUE.lock() {
+            queue.push(KeyboardInput {
+                key_code,
+                logical_key,
+                state: ButtonState::Pressed,
+                repeat: false,
+                text: None,
+                window: Entity::PLACEHOLDER,
+            });
+        }
+
+        if key == "Enter" {
             if let Some(el) = get_input_element() {
-                let value = el.value();
-                if let Ok(mut queue) = EVENT_QUEUE.lock() {
-                    queue.push(WebEvent::Input(value));
-                }
-            }
-        }) as Box<dyn FnMut(_)>);
-
-        let keydown_handler = Closure::wrap(Box::new(move |e: web_sys::KeyboardEvent| {
-            if e.key() == "Enter" {
-                if let Some(el) = get_input_element() {
-                    let value = el.value();
-                    if let Ok(mut queue) = EVENT_QUEUE.lock() {
-                        queue.push(WebEvent::Submit(value));
-                    }
-                    el.set_value("");
-                }
-            }
-        }) as Box<dyn FnMut(_)>);
-
-        let _ =
-            input.add_event_listener_with_callback("input", input_handler.as_ref().unchecked_ref());
-        let _ = input
-            .add_event_listener_with_callback("keydown", keydown_handler.as_ref().unchecked_ref());
-
-        input_handler.forget();
-        keydown_handler.forget();
-    }
-
-    #[wasm_bindgen]
-    extern "C" {
-        #[wasm_bindgen(js_name = bevyFocusInput)]
-        fn js_focus_input();
-    }
-
-    pub fn focus_input() {
-        js_focus_input();
-    }
-
-    pub fn poll_web_input(
-        mut input_events: MessageWriter<WebTextInput>,
-        mut submit_events: MessageWriter<WebTextSubmit>,
-    ) {
-        let events: Vec<WebEvent> = {
-            let Ok(mut queue) = EVENT_QUEUE.lock() else {
-                return;
-            };
-            std::mem::take(&mut *queue)
-        };
-
-        for event in events {
-            match event {
-                WebEvent::Input(text) => {
-                    input_events.write(WebTextInput(text));
-                }
-                WebEvent::Submit(text) => {
-                    submit_events.write(WebTextSubmit(text));
-                }
+                el.set_value("");
             }
         }
+    }) as Box<dyn FnMut(_)>);
+
+    let _ = input.add_event_listener_with_callback("input", input_handler.as_ref().unchecked_ref());
+    let _ =
+        input.add_event_listener_with_callback("keydown", keydown_handler.as_ref().unchecked_ref());
+
+    input_handler.forget();
+    keydown_handler.forget();
+}
+
+fn poll_events(mut keyboard_events: MessageWriter<KeyboardInput>) {
+    let Ok(mut queue) = EVENT_QUEUE.lock() else {
+        return;
+    };
+    for event in queue.drain(..) {
+        keyboard_events.write(event);
     }
 }
